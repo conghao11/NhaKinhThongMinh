@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Base.Theme.NhaKinhthongminh" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/aqua_primary</item>
+        <item name="colorSecondaryContainer">#E0F7FA</item>
+        <item name="colorOnSecondaryContainer">#00838F</item>
+    </style>
+
+    <style name="Theme.NhaKinhthongminh" parent="Base.Theme.NhaKinhthongminh" />
+</resources>

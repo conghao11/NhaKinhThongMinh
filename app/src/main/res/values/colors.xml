@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="aqua_primary">#00ACC1</color>
+    <color name="aqua_primary_dark">#00838F</color>
+    <color name="aqua_light">#E0F7FA</color>
+    <color name="aqua_accent">#26C6DA</color>
+
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="text_main">#212121</color>
+    <color name="text_sub">#757575</color>
+    <color name="bg_screen">#F5F7F8</color>
+</resources>
