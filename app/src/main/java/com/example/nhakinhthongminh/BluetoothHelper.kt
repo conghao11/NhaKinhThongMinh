@@ -1,89 +1,158 @@
 package com.example.nhakinhthongminh
 
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothSocket
+import android.bluetooth.*
+import android.bluetooth.le.BluetoothLeScanner
+import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanResult
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
-import java.io.InputStream
-import java.io.OutputStream
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import java.util.UUID
 
 @SuppressLint("MissingPermission")
 object BluetoothHelper {
-    private var bluetoothSocket: BluetoothSocket? = null
-    var outputStream: OutputStream? = null
-    var inputStream: InputStream? = null
-    private val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-    fun isConnected(): Boolean = bluetoothSocket?.isConnected ?: false
+    private var bluetoothGatt: BluetoothGatt? = null
+    private var rxCharacteristic: BluetoothGattCharacteristic? = null
 
-    fun connectToDevice(context: Context, deviceName: String = "HC-05"): Boolean {
-        if (isConnected()) return true
+    //bien dinh tuyen
+    var isOfflineMode = false
 
+    //bien quan ly luong quet ngam
+    private var bluetoothLeScanner: BluetoothLeScanner? = null
+    private var currentScanCallback: ScanCallback? = null
+
+    //phat du lieu cam bien
+    private val _bleData = MutableLiveData<String>()
+    val bleData: LiveData<String> get() = _bleData
+
+    //thog bao trang thai ket noi
+    private val _connectionState = MutableLiveData<Boolean>()
+    val connectionState: LiveData<Boolean> get() = _connectionState
+
+    private val SERVICE_UUID: UUID = UUID.fromString("6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
+    private val RX_UUID: UUID = UUID.fromString("6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
+    private val TX_UUID: UUID = UUID.fromString("6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
+
+    private var isBleConnected = false
+    fun isConnected(): Boolean = isBleConnected
+
+    fun loadMode(context: Context) {
+        val prefs = context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+        isOfflineMode = prefs.getBoolean("OFFLINE_MODE", false)
+    }
+
+    fun setMode(context: Context, isOffline: Boolean) {
+        isOfflineMode = isOffline
+        val prefs = context.getSharedPreferences("AppConfig", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("OFFLINE_MODE", isOffline).apply()
+    }
+
+    fun connectToDevice(context: Context, deviceName: String = "NhaKinh_ESP32S3") {
+        stopScanning()
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-        val bluetoothAdapter: BluetoothAdapter? = bluetoothManager.adapter
+        val adapter: BluetoothAdapter? = bluetoothManager.adapter
+        bluetoothLeScanner = adapter?.bluetoothLeScanner
 
-        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
-            Log.e("Bluetooth", "LỖI: Bluetooth chưa bật trên điện thoại!")
-            return false
+        if (bluetoothLeScanner == null) {
+            Log.e("BLE", "LỖI: Bluetooth chưa bật hoặc không hỗ trợ BLE!")
+            return
         }
 
-        val pairedDevices = bluetoothAdapter.bondedDevices
-        val targetDevice = pairedDevices.find {
-            it.name?.trim()?.equals(deviceName.trim(), ignoreCase = true) == true
-        }
+        currentScanCallback = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                //neu user bat sang Wifi (!isOfflineMode),
+                //dung ngay lap tuc tien trinh quet ngam nay lai va ko ket noi GATT nua!
+                if (!isOfflineMode) {
+                    stopScanning()
+                    return
+                }
 
-        if (targetDevice == null) {
-            Log.e("Bluetooth", "LỖI: Không tìm thấy thiết bị tên $deviceName trong danh sách đã lưu!")
-            return false
-        }
-
-        return try {
-            Log.d("Bluetooth", "Đang thử kết nối với ${targetDevice.name} (${targetDevice.address})")
-
-            val m = targetDevice.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
-            bluetoothSocket = m.invoke(targetDevice, 1) as BluetoothSocket
-            bluetoothSocket?.connect()
-            outputStream = bluetoothSocket?.outputStream
-            inputStream = bluetoothSocket?.inputStream
-
-            Log.d("Bluetooth", "KẾT NỐI THÀNH CÔNG! Streams đã mở.")
-            true
-        } catch (e: Exception) {
-            Log.e("Bluetooth", "Kết nối thất bại: ${e.message}")
-            try {
-                bluetoothSocket = targetDevice.createInsecureRfcommSocketToServiceRecord(SPP_UUID)
-                bluetoothSocket?.connect()
-                outputStream = bluetoothSocket?.outputStream
-                inputStream = bluetoothSocket?.inputStream
-                true
-            } catch (e2: Exception) {
-                Log.e("Bluetooth", "Cả 2 phương thức kết nối đều hỏng: ${e2.message}")
-                closeConnection()
-                false
+                val device = result.device
+                if (device.name == deviceName) {
+                    stopScanning()
+                    connectGatt(context, device)
+                }
             }
         }
+
+        bluetoothLeScanner?.startScan(currentScanCallback)
+
+        //tu dong dung quet sau 10s
+        Handler(Looper.getMainLooper()).postDelayed({
+            stopScanning()
+        }, 10000)
+    }
+    private fun stopScanning() {
+        try {
+            if (bluetoothLeScanner != null && currentScanCallback != null) {
+                bluetoothLeScanner?.stopScan(currentScanCallback)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            currentScanCallback = null
+        }
+    }
+    private fun connectGatt(context: Context, device: BluetoothDevice) {
+        bluetoothGatt = device.connectGatt(context, false, object : BluetoothGattCallback() {
+            override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
+                if (newState == BluetoothProfile.STATE_CONNECTED) {
+                    isBleConnected = true
+                    _connectionState.postValue(true)
+                    gatt.discoverServices()
+                } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                    isBleConnected = false
+                    _connectionState.postValue(false)
+                    gatt.close()
+                }
+            }
+            override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
+                if (status == BluetoothGatt.GATT_SUCCESS) {
+                    val service = gatt.getService(SERVICE_UUID)
+                    if (service != null) {
+                        rxCharacteristic = service.getCharacteristic(RX_UUID)
+                        val txChar = service.getCharacteristic(TX_UUID)
+                        gatt.setCharacteristicNotification(txChar, true)
+                        val descriptor = txChar.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"))
+                        if (descriptor != null) {
+                            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                            gatt.writeDescriptor(descriptor)
+                        }
+                    }
+                }
+            }
+            override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
+                val data = String(characteristic.value)
+                _bleData.postValue(data)
+            }
+        })
     }
     fun sendCommand(command: String) {
-        if (!isConnected()) return
+        if (!isBleConnected || bluetoothGatt == null || rxCharacteristic == null) return
         try {
-            val data = (command + "\n").toByteArray()
-            outputStream?.write(data)
-            outputStream?.flush()
-            Log.d("Bluetooth", "Đã gửi: $command")
+            rxCharacteristic?.value = (command + "\n").toByteArray()
+            rxCharacteristic?.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            bluetoothGatt?.writeCharacteristic(rxCharacteristic)
         } catch (e: Exception) {
-            Log.e("Bluetooth", "Lỗi gửi dữ liệu: ${e.message}")
+            Log.e("BLE", "Lỗi gửi: ${e.message}")
         }
     }
     fun closeConnection() {
         try {
-            bluetoothSocket?.close()
-            bluetoothSocket = null
-            outputStream = null
-            inputStream = null
-            Log.d("Bluetooth", "Đã đóng Bluetooth")
+            stopScanning()
+            if (bluetoothGatt != null) {
+                bluetoothGatt?.disconnect()
+                Handler(Looper.getMainLooper()).postDelayed({
+                    bluetoothGatt?.close()
+                    bluetoothGatt = null
+                }, 200)
+            }
+            isBleConnected = false
+            _connectionState.postValue(false)
         } catch (e: Exception) {
             e.printStackTrace()
         }

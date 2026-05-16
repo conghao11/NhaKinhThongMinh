@@ -4,19 +4,18 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.GridLayoutManager
 import com.example.nhakinhthongminh.databinding.FragmentPlantsBinding
 import com.google.firebase.database.FirebaseDatabase
 
 class PlantsFragment : Fragment() {
-
     private var _binding: FragmentPlantsBinding? = null
     private val binding get() = _binding!!
     private lateinit var adapter: PlantAdapter
     private lateinit var fullList: List<Plant>
-
-    // KẾT NỐI FIREBASE
+    //ket noi firebase
     private val database = FirebaseDatabase.getInstance("https://nhakinhthongminh-b3a94-default-rtdb.asia-southeast1.firebasedatabase.app").reference
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -27,11 +26,9 @@ class PlantsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Cập nhật lại list, thêm thẻ "Tắt tự động" lên vị trí đầu tiên
+        //cap nhat lai list
         fullList = listOf(
-            // Thẻ chức năng: Reset về chế độ bơm thủ công (Target = 0)
             Plant("Tắt tự động", "Thủ công", "Bơm bằng tay", android.R.drawable.ic_menu_revert, "Khác", 0),
-
             Plant("Cà chua", "20-25°C", "60-70%", R.drawable.cachua, "Ăn quả", 60),
             Plant("Dâu tây", "15-22°C", "70-80%", R.drawable.dautay, "Ăn quả", 70),
             Plant("Dưa lưới", "25-30°C", "50-60%", R.drawable.dualuoi, "Ăn quả", 50),
@@ -40,12 +37,17 @@ class PlantsFragment : Fragment() {
             Plant("Rau xà lách", "15-20°C", "65-75%", R.drawable.xalach, "Ăn lá", 65)
         )
 
-        // Khởi tạo Adapter và bắt sự kiện Click vào Cây
         adapter = PlantAdapter(fullList.toMutableList()) { selectedPlant ->
-            // Bắn TargetMoisture lên Firebase
-            database.child("Control").child("TargetMoisture").setValue(selectedPlant.targetMoisture)
-        }
 
+            //dinh tuyen
+            if (BluetoothHelper.isOfflineMode) {
+                //gui lenh qua ble
+                BluetoothHelper.sendCommand("M:${selectedPlant.targetMoisture}")
+                Toast.makeText(requireContext(), "Đã nạp qua Bluetooth", Toast.LENGTH_SHORT).show()
+            } else {
+                database.child("Control").child("TargetMoisture").setValue(selectedPlant.targetMoisture)
+            }
+        }
         binding.rvPlants.layoutManager = GridLayoutManager(requireContext(), 2)
         binding.rvPlants.adapter = adapter
 

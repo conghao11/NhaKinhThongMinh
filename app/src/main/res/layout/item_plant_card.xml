@@ -75,7 +75,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="4dp"
-                android:text="NẠP"
+                android:text="Áp dụng"
                 android:textColor="@color/aqua_primary_dark"
                 android:textSize="12sp"
                 android:textStyle="bold"/>

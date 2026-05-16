@@ -20,13 +20,10 @@ import com.google.firebase.database.FirebaseDatabase
 class AutomationFragment : Fragment() {
     private var _binding: FragmentAutomationBinding? = null
     private val binding get() = _binding!!
-
-    // KẾT NỐI FIREBASE
+    //ket noi firebase
     private val database = FirebaseDatabase.getInstance("https://nhakinhthongminh-b3a94-default-rtdb.asia-southeast1.firebasedatabase.app").reference
-
     private var currentChartType = "TEMP"
-
-    // GỌI KHO DỮ LIỆU VIEWMODEL
+    //goi viewmodel
     private lateinit var viewModel: AutomationViewModel
 
     override fun onCreateView(
@@ -36,22 +33,18 @@ class AutomationFragment : Fragment() {
         _binding = FragmentAutomationBinding.inflate(inflater, container, false)
         return binding.root
     }
-
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         initChartStyling()
-
-        // Gắn ViewModel vào Activity chung (để sống xuyên suốt các tab)
         viewModel = ViewModelProvider(requireActivity())[AutomationViewModel::class.java]
-
-        // Lắng nghe tín hiệu "có dữ liệu mới" từ nhà kho ViewModel
+        //lang nghe tin hieu moi tu viewmodel
         viewModel.dataUpdated.observe(viewLifecycleOwner) {
             if (_binding != null) {
                 loadChartData(currentChartType)
             }
         }
 
-        // --- ĐỒNG BỘ DỮ LIỆU TỪ FIREBASE KHI MỞ TAB ---
+        //dong bo du lieu firebase khi mo tab
         database.child("Control").get().addOnSuccessListener { snapshot ->
             if (snapshot.exists() && isAdded) {
                 val tTemp = snapshot.child("TargetTemp").getValue(Int::class.java) ?: 0
@@ -82,7 +75,6 @@ class AutomationFragment : Fragment() {
                 }
             }
         }
-        // ----------------------------------------------
 
         binding.chipGroupChart.setOnCheckedChangeListener { _, checkedId ->
             when (checkedId) {
@@ -127,22 +119,20 @@ class AutomationFragment : Fragment() {
         binding.btnSaveAutomation.setOnClickListener {
             view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
 
-            if (binding.switchAutoMode.isChecked) {
-                val targetTemp = binding.sliderTemp.value.toInt()
-                val targetMoist = binding.sliderMoisture.value.toInt()
-                val targetLight = if (binding.sliderLight.value >= 0.5f) 1 else 0
+            val targetTemp = if (binding.switchAutoMode.isChecked) binding.sliderTemp.value.toInt() else 0
+            val targetMoist = if (binding.switchAutoMode.isChecked) binding.sliderMoisture.value.toInt() else 0
+            val targetLight = if (binding.switchAutoMode.isChecked) (if (binding.sliderLight.value >= 0.5f) 1 else 0) else -1
 
+            //dinh tuyen
+            if (BluetoothHelper.isOfflineMode) {
+                //gui cum cau hinh sang ble
+                BluetoothHelper.sendCommand("AUTO:$targetTemp|$targetMoist|$targetLight")
+                Toast.makeText(requireContext(), "Đã nạp cấu hình offline thành công!", Toast.LENGTH_LONG).show()
+            } else {
                 database.child("Control").child("TargetTemp").setValue(targetTemp)
                 database.child("Control").child("TargetMoisture").setValue(targetMoist)
                 database.child("Control").child("TargetLight").setValue(targetLight)
-
-                val msg = "Đã nạp mạch: Quạt > $targetTemp°C | Bơm < $targetMoist% | Đèn khi ${if(targetLight == 1) "Tối" else "Sáng"}"
-                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
-            } else {
-                database.child("Control").child("TargetTemp").setValue(0)
-                database.child("Control").child("TargetMoisture").setValue(0)
-                database.child("Control").child("TargetLight").setValue(-1)
-                Toast.makeText(requireContext(), "Đã tắt Auto. Mạch chờ lệnh thủ công.", Toast.LENGTH_LONG).show()
+                Toast.makeText(requireContext(), "Đã nạp mạch qua Wi-Fi!", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -171,7 +161,6 @@ class AutomationFragment : Fragment() {
             legend.isEnabled = false
         }
     }
-
     private fun loadChartData(type: String) {
         val entries = ArrayList<Entry>()
         val dataList: List<Float>
@@ -179,8 +168,7 @@ class AutomationFragment : Fragment() {
         val lineColorStr: String
         val gradientResId: Int
         val unit: String
-
-        // LẤY DỮ LIỆU TỪ NHÀ KHO VIEWMODEL THAY VÌ MẢNG CỤC BỘ
+        //lay du lieu tu viewmodel
         when (type) {
             "MOIST" -> {
                 dataList = viewModel.moistHistory
@@ -207,7 +195,6 @@ class AutomationFragment : Fragment() {
                 binding.lineChart.axisLeft.axisMinimum = 0f
             }
         }
-
         if (dataList.isEmpty()) {
             binding.lineChart.clear()
             return
@@ -248,6 +235,5 @@ class AutomationFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
-        // Không cần gỡ Listener ở đây nữa vì ViewModel sẽ quản lý toàn bộ việc nghe Firebase!
     }
 }

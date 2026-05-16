@@ -8,12 +8,10 @@ import com.example.nhakinhthongminh.databinding.ItemNotificationBinding
 class NotificationAdapter(private var list: List<Notification>) :
     RecyclerView.Adapter<NotificationAdapter.NotiViewHolder>() {
     inner class NotiViewHolder(val binding: ItemNotificationBinding) : RecyclerView.ViewHolder(binding.root)
-
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): NotiViewHolder {
         val binding = ItemNotificationBinding.inflate(LayoutInflater.from(parent.context), parent, false)
         return NotiViewHolder(binding)
     }
-
     override fun onBindViewHolder(holder: NotiViewHolder, position: Int) {
         val item = list[position]
         holder.binding.apply {
@@ -40,9 +38,7 @@ class NotificationAdapter(private var list: List<Notification>) :
             }
         }
     }
-
     override fun getItemCount() = list.size
-
     fun updateData(newList: List<Notification>) {
         list = newList
         notifyDataSetChanged()
